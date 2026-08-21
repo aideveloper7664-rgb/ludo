@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Ludo - 2 Khiladi</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ============ LOADING SCREEN ============ -->
+<div id="loadingScreen" class="screen">
+  <img id="loadingSpinner" class="loading-spinner" src="assets/loading/1.png" alt="loading">
+  <div class="loading-text">Loading Ludo...</div>
+</div>
+
+<!-- ============ HOME / TITLE SCREEN ============ -->
+<div id="homeScreen" class="screen hidden">
+  <button id="musicToggleHome" class="icon-btn music-btn">
+    <img src="assets/object/ak_music_on.png" alt="music">
+  </button>
+
+  <img class="title-logo" src="assets/object/title.png" alt="LUDO">
+
+  <div class="panel">
+    <div class="panel-title">Players kitne?</div>
+    <div class="pcount-row">
+      <button class="pcount-btn" data-n="2"><img src="assets/object/ak_2p.png" alt="2 players"><span>2</span></button>
+      <button class="pcount-btn" data-n="3"><img src="assets/object/ak_3p.png" alt="3 players"><span>3</span></button>
+      <button class="pcount-btn" data-n="4"><img src="assets/object/ak_4p.png" alt="4 players"><span>4</span></button>
+    </div>
+
+    <div class="panel-title">Colours chuno</div>
+    <div class="color-row">
+      <button class="color-chip" data-color="green"><img src="assets/object/ak_pawn_green.png"><span>Green</span></button>
+      <button class="color-chip" data-color="red"><img src="assets/object/ak_pawn_red.png"><span>Red</span></button>
+      <button class="color-chip" data-color="yellow"><img src="assets/object/ak_pawn_yellow.png"><span>Yellow</span></button>
+      <button class="color-chip" data-color="blue"><img src="assets/object/ak_pawn_blue.png"><span>Blue</span></button>
+    </div>
+    <div id="colorHint" class="hint">2 colours chuno</div>
+
+    <button id="startBtn" class="cta-btn" disabled>Game Shuru Karo</button>
+  </div>
+</div>
+
+<!-- ============ GAME SCREEN ============ -->
+<div id="gameScreen" class="screen hidden">
+  <div class="top-bar">
+    <button id="musicToggleGame" class="icon-btn music-btn small">
+      <img src="assets/object/ak_music_on.png" alt="music">
+    </button>
+    <div id="turnBanner" class="turn-banner">--</div>
+    <button id="quitBtn" class="icon-btn small">
+      <img src="assets/object/ak_close.png" alt="quit">
+    </button>
+  </div>
+
+  <div id="boardWrap" class="board-wrap">
+    <img id="boardImg" class="board-img" src="assets/object/ak_board.png" alt="board">
+    <div id="pawnLayer" class="pawn-layer"></div>
+  </div>
+
+  <div class="bottom-bar">
+    <div id="diceArea" class="dice-area">
+      <img id="diceImg" src="assets/rotateobject/1.png" alt="dice">
+    </div>
+    <div id="statusText" class="status-text">Dice roll karo</div>
+  </div>
+</div>
+
+<!-- ============ QUIT CONFIRM ============ -->
+<div id="quitPanel" class="overlay hidden">
+  <div class="panel quit-panel">
+    <img class="panel-bg" src="assets/object/ak_quitpanel.png" alt="">
+    <div class="quit-inner">
+      <div class="quit-text">Game chodna hai?</div>
+      <div class="quit-btns">
+        <button id="quitYes"><img src="assets/object/ak_yes.png" alt="yes"></button>
+        <button id="quitNo"><img src="assets/object/ak_no.png" alt="no"></button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ RESULT SCREEN ============ -->
+<div id="resultScreen" class="overlay hidden">
+  <div class="panel result-panel">
+    <img class="panel-bg" src="assets/object/ak_resultpanel.png" alt="">
+    <div class="result-inner">
+      <div id="resultText" class="result-text">Winner!</div>
+      <button id="replayBtn"><img src="assets/object/ak_replay.png" alt="replay"></button>
+    </div>
+  </div>
+</div>
+
+<audio id="sndTap" src="assets/music/tap.ogg"></audio>
+<audio id="sndRoll" src="assets/music/roling.ogg"></audio>
+<audio id="sndOpen" src="assets/music/pawnsopenhome.ogg"></audio>
+<audio id="sndWalkCW" src="assets/music/pawnswalkclock.ogg"></audio>
+<audio id="sndWalkCCW" src="assets/music/pawnswalkanticlock.ogg"></audio>
+<audio id="sndCapture" src="assets/music/singlered.ogg"></audio>
+<audio id="sndWin" src="assets/music/win.ogg"></audio>
+<audio id="bgMusic" src="assets/music/singlered.ogg" loop></audio>
+
+<script src="board-data.js"></script>
+<script src="game.js"></script>
+<script src="ui.js"></script>
+</body>
+</html>
