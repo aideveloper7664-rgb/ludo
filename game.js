@@ -108,23 +108,18 @@ class LudoGame {
     return this.pawns[color].every(p => p.pos === FINISH_POS);
   }
 
-  // Call after a move (or a no-move turn) to figure out whose turn is next
+  // Call after a move (or a no-move turn) to figure out whose turn is next.
+  // The first player to get all 4 pawns home wins and the game ends there
+  // (simple, casual-friendly rule - matches most mobile ludo apps).
   endTurn(forcedPass = false) {
     const color = this.currentPlayer;
 
     if (this.hasWon(color) && !this.winners.includes(color)) {
       this.winners.push(color);
-      // remove finished player from rotation order handling is done by caller
-    }
-
-    const remainingPlayers = this.players.filter(c => !this.winners.includes(c));
-    if (remainingPlayers.length <= 1) {
       this.gameOver = true;
-      if (remainingPlayers.length === 1 && !this.winners.includes(remainingPlayers[0])) {
-        this.winners.push(remainingPlayers[0]);
-      }
       this.diceRolled = false;
       this.diceValue = null;
+      this.sixStreak = 0;
       return;
     }
 
@@ -134,19 +129,8 @@ class LudoGame {
     if (this.sixStreak === 3) this.sixStreak = 0;
 
     if (!extraTurn) {
-      let next = this.turnIndex;
-      do {
-        next = (next + 1) % this.players.length;
-      } while (this.winners.includes(this.players[next]));
-      this.turnIndex = next;
+      this.turnIndex = (this.turnIndex + 1) % this.players.length;
       this.sixStreak = 0;
-    } else if (this.winners.includes(this.currentPlayer)) {
-      // safety: shouldn't happen, but avoid stuck state
-      let next = this.turnIndex;
-      do {
-        next = (next + 1) % this.players.length;
-      } while (this.winners.includes(this.players[next]));
-      this.turnIndex = next;
     }
   }
 }

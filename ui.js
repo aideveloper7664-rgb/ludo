@@ -1,383 +1,371 @@
 /* ==========================================================================
-   ui.js  –  Ludo UI controller
-   Depends on: board-data.js (PATHS, BASE_SLOTS, COLORS)
-               game.js      (LudoGame)
+   UI.JS - wires the LudoGame engine to the DOM
    ========================================================================== */
 
-'use strict';
+const COLOR_LABEL = { green: 'Green', red: 'Red', yellow: 'Yellow', blue: 'Blue' };
+const COLOR_HEX = { green: '#1fa059', red: '#e53935', yellow: '#f5c518', blue: '#2196f3' };
 
-/* ---- Sound helpers ---- */
+let game = null;
+let selectedPlayerCount = 2;
+let selectedColors = [];
 let musicOn = true;
-const SFX = {
-  tap:     document.getElementById('sndTap'),
-  roll:    document.getElementById('sndRoll'),
-  open:    document.getElementById('sndOpen'),
-  walkCW:  document.getElementById('sndWalkCW'),
-  walkCCW: document.getElementById('sndWalkCCW'),
-  capture: document.getElementById('sndCapture'),
-  win:     document.getElementById('sndWin'),
-};
-const bgMusic = document.getElementById('bgMusic');
+let rollLock = false;
 
-function playSound(sfxKey) {
-  if (!musicOn) return;
-  const el = SFX[sfxKey];
+// ---------------------------------------------------------------------
+// Boot / loading screen
+// ---------------------------------------------------------------------
+window.addEventListener('load', () => {
+  setTimeout(() => {
+    show('homeScreen');
+    hide('loadingScreen');
+  }, 600);
+});
+
+function show(id) { document.getElementById(id).classList.remove('hidden'); }
+function hide(id) { document.getElementById(id).classList.add('hidden'); }
+
+function playSound(id) {
+  const el = document.getElementById(id);
   if (!el) return;
-  el.currentTime = 0;
-  el.play().catch(() => {});
+  try {
+    el.currentTime = 0;
+    el.play().catch(() => {});
+  } catch (e) {}
 }
+
+// ---------------------------------------------------------------------
+// HOME SCREEN - player count + colour selection
+// ---------------------------------------------------------------------
+const DEFAULT_COLORS_BY_COUNT = {
+  2: ['green', 'blue'],
+  3: ['green', 'red', 'blue'],
+  4: ['green', 'red', 'blue', 'yellow']
+};
+
+function initHomeScreen() {
+  const pcountBtns = document.querySelectorAll('.pcount-btn');
+  pcountBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      pcountBtns.forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+      selectedPlayerCount = parseInt(btn.dataset.n, 10);
+      selectedColors = DEFAULT_COLORS_BY_COUNT[selectedPlayerCount].slice();
+      syncColorChips();
+      playSound('sndTap');
+    });
+  });
+  // default select 2p
+  pcountBtns[0].classList.add('selected');
+  selectedColors = DEFAULT_COLORS_BY_COUNT[2].slice();
+
+  const colorChips = document.querySelectorAll('.color-chip');
+  colorChips.forEach(chip => {
+    chip.addEventListener('click', () => {
+      const c = chip.dataset.color;
+      playSound('sndTap');
+      if (selectedColors.includes(c)) {
+        selectedColors = selectedColors.filter(x => x !== c);
+      } else {
+        if (selectedColors.length >= selectedPlayerCount) {
+          // replace the earliest chosen colour
+          selectedColors.shift();
+        }
+        selectedColors.push(c);
+      }
+      syncColorChips();
+    });
+  });
+
+  syncColorChips();
+
+  document.getElementById('startBtn').addEventListener('click', () => {
+    if (selectedColors.length !== selectedPlayerCount) return;
+    playSound('sndTap');
+    startGame(selectedColors.slice());
+  });
+
+  document.getElementById('musicToggleHome').addEventListener('click', toggleMusic);
+  document.getElementById('musicToggleGame').addEventListener('click', toggleMusic);
+}
+
+function syncColorChips() {
+  const chips = document.querySelectorAll('.color-chip');
+  chips.forEach(chip => {
+    const c = chip.dataset.color;
+    chip.classList.toggle('selected', selectedColors.includes(c));
+  });
+  const hint = document.getElementById('colorHint');
+  const remaining = selectedPlayerCount - selectedColors.length;
+  hint.textContent = remaining > 0
+    ? `${remaining} colour${remaining > 1 ? 's' : ''} aur chuno`
+    : `${selectedPlayerCount} colours chuni gayi \u2713`;
+  document.getElementById('startBtn').disabled = selectedColors.length !== selectedPlayerCount;
+}
+
 function toggleMusic() {
   musicOn = !musicOn;
-  const imgs = document.querySelectorAll('.music-btn img');
-  imgs.forEach(img => {
-    img.src = musicOn
+  const bg = document.getElementById('bgMusic');
+  const icons = ['musicToggleHome', 'musicToggleGame'];
+  icons.forEach(id => {
+    document.querySelector(`#${id} img`).src = musicOn
       ? 'assets/object/ak_music_on.png'
       : 'assets/object/ak_music_off.png';
   });
-  if (musicOn) bgMusic.play().catch(() => {});
-  else bgMusic.pause();
-}
-document.getElementById('musicToggleHome').addEventListener('click', () => { playSound('tap'); toggleMusic(); });
-document.getElementById('musicToggleGame').addEventListener('click', () => { playSound('tap'); toggleMusic(); });
-
-/* ---- Screen helpers ---- */
-function showScreen(id) {
-  document.querySelectorAll('.screen').forEach(s => s.classList.add('hidden'));
-  document.getElementById(id).classList.remove('hidden');
-}
-function showOverlay(id) { document.getElementById(id).classList.remove('hidden'); }
-function hideOverlay(id) { document.getElementById(id).classList.add('hidden'); }
-
-/* ---- Loading screen ---- */
-(function startLoading() {
-  const frames = 24;
-  let f = 1;
-  const spinner = document.getElementById('loadingSpinner');
-  const iv = setInterval(() => {
-    f = (f % frames) + 1;
-    spinner.src = `assets/loading/${f}.png`;
-  }, 80);
-  setTimeout(() => {
-    clearInterval(iv);
-    showScreen('homeScreen');
-  }, 2000);
-})();
-
-/* ---- Home screen ---- */
-let selectedPlayerCount = 2;
-let selectedColors = new Set();
-
-// Player count buttons
-document.querySelectorAll('.pcount-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    playSound('tap');
-    selectedPlayerCount = +btn.dataset.n;
-    document.querySelectorAll('.pcount-btn').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    // reset colours
-    selectedColors.clear();
-    document.querySelectorAll('.color-chip').forEach(c => c.classList.remove('active'));
-    updateHint();
-    updateStartBtn();
-  });
-});
-// Default 2p highlighted
-document.querySelector('.pcount-btn[data-n="2"]').classList.add('active');
-
-// Color chips
-document.querySelectorAll('.color-chip').forEach(chip => {
-  chip.addEventListener('click', () => {
-    playSound('tap');
-    const color = chip.dataset.color;
-    if (selectedColors.has(color)) {
-      selectedColors.delete(color);
-      chip.classList.remove('active');
-    } else if (selectedColors.size < selectedPlayerCount) {
-      selectedColors.add(color);
-      chip.classList.add('active');
-    }
-    updateHint();
-    updateStartBtn();
-  });
-});
-
-function updateHint() {
-  const hint = document.getElementById('colorHint');
-  const need = selectedPlayerCount - selectedColors.size;
-  if (need <= 0) hint.textContent = '✓ Colours ready!';
-  else hint.textContent = `${need} colour${need > 1 ? 's' : ''} aur chuno`;
-}
-
-function updateStartBtn() {
-  const btn = document.getElementById('startBtn');
-  btn.disabled = selectedColors.size !== selectedPlayerCount;
-}
-updateHint();
-
-document.getElementById('startBtn').addEventListener('click', () => {
-  playSound('tap');
-  const players = COLORS.filter(c => selectedColors.has(c)); // enforce board order
-  startGame(players);
-});
-
-/* ================================================================
-   GAME LOGIC & RENDERING
-   ================================================================ */
-let game = null;
-let rolling = false;
-
-const pawnLayer  = document.getElementById('pawnLayer');
-const boardWrap  = document.getElementById('boardWrap');
-const diceImg    = document.getElementById('diceImg');
-const turnBanner = document.getElementById('turnBanner');
-const statusText = document.getElementById('statusText');
-
-/* Convert grid coordinates (0..14) to percentage positions */
-function gridToPct(col, row) {
-  // The board has 15 cells; each cell is 1/15 of the board width.
-  // Centre of cell [c,r] is at ((c + 0.5) / 15) * 100 %
-  return {
-    left: ((col + 0.5) / 15) * 100,
-    top:  ((row + 0.5) / 15) * 100,
-  };
-}
-
-/* ---- Pawn DOM management ---- */
-const pawnEls = {}; // pawnEls[color][id] = <img>
-
-function createPawnElements(players) {
-  pawnLayer.innerHTML = '';
-  for (const color of players) {
-    pawnEls[color] = {};
-    for (let id = 0; id < 4; id++) {
-      const img = document.createElement('img');
-      img.src = `assets/object/ak_pawn_${color}.png`;
-      img.alt = `${color} pawn ${id}`;
-      img.className = 'pawn in-base';
-      img.dataset.color = color;
-      img.dataset.id = id;
-      img.addEventListener('click', () => onPawnClick(color, id));
-      pawnLayer.appendChild(img);
-      pawnEls[color][id] = img;
-    }
-  }
-}
-
-function placePawn(color, id, pos) {
-  const el = pawnEls[color][id];
-  if (!el) return;
-
-  if (pos === -1) {
-    // In base
-    const [sc, sr] = BASE_SLOTS[color][id];
-    const p = gridToPct(sc, sr);
-    el.style.left = p.left + '%';
-    el.style.top  = p.top  + '%';
-    el.classList.add('in-base');
-  } else if (pos === FINISH_POS) {
-    // At centre
-    const [cc, cr] = CENTER;
-    const p = gridToPct(cc + (id < 2 ? -0.35 : 0.35), cr + (id % 2 === 0 ? -0.35 : 0.35));
-    el.style.left = p.left + '%';
-    el.style.top  = p.top  + '%';
-    el.classList.remove('in-base');
+  if (musicOn) {
+    bg.volume = 0.35;
+    bg.play().catch(() => {});
   } else {
-    const [gc, gr] = PATHS[color][pos];
-    // Stack offset if multiple pawns share same cell
-    const offset = getStackOffset(color, id, pos);
-    const p = gridToPct(gc + offset.dc, gr + offset.dr);
-    el.style.left = p.left + '%';
-    el.style.top  = p.top  + '%';
-    el.classList.remove('in-base');
+    bg.pause();
   }
 }
 
-function getStackOffset(color, id, pos) {
-  // tiny spread if multiple pawns of same colour on same square
-  const count = game.pawns[color].filter(p => p.pos === pos).length;
-  if (count <= 1) return { dc: 0, dr: 0 };
-  const slots = [[-0.25,-0.25],[0.25,-0.25],[-0.25,0.25],[0.25,0.25]];
-  const myIndex = game.pawns[color].filter(p => p.pos === pos).findIndex(p => p.id === id);
-  return myIndex >= 0 ? { dc: slots[myIndex][0], dr: slots[myIndex][1] } : { dc: 0, dr: 0 };
-}
-
-function renderAllPawns() {
-  if (!game) return;
-  for (const color of game.players) {
-    for (const pawn of game.pawns[color]) {
-      placePawn(color, pawn.id, pawn.pos);
-    }
-  }
-}
-
-function highlightMovable(ids) {
-  // Remove all highlights first
-  Object.values(pawnEls).forEach(byId => {
-    Object.values(byId).forEach(el => el.classList.remove('movable'));
-  });
-  const color = game.currentPlayer;
-  for (const id of ids) {
-    if (pawnEls[color] && pawnEls[color][id]) {
-      pawnEls[color][id].classList.add('movable');
-    }
-  }
-}
-
-/* ---- Dice animation ---- */
-function animateDice(finalValue, cb) {
-  rolling = true;
-  let count = 0;
-  const total = 10;
-  const iv = setInterval(() => {
-    const face = 1 + Math.floor(Math.random() * 6);
-    diceImg.src = `assets/rotateobject/diceroll${1 + (count % 4)}.png`;
-    count++;
-    if (count >= total) {
-      clearInterval(iv);
-      diceImg.src = `assets/rotateobject/${finalValue}.png`;
-      rolling = false;
-      cb();
-    }
-  }, 80);
-}
-
-/* ---- UI state updates ---- */
-function updateBanner() {
-  const color = game.currentPlayer;
-  const colorNames = { green: 'Hara', red: 'Lal', blue: 'Neela', yellow: 'Peela' };
-  turnBanner.textContent = `${colorNames[color] || color} ki bari`;
-  turnBanner.style.color = `var(--${color})`;
-}
-
-/* ---- Game flow ---- */
+// ---------------------------------------------------------------------
+// GAME SCREEN
+// ---------------------------------------------------------------------
 function startGame(players) {
   game = new LudoGame(players);
-  createPawnElements(players);
-  renderAllPawns();
-  updateBanner();
-  statusText.textContent = 'Dice roll karo';
-  diceImg.src = 'assets/rotateobject/1.png';
-  showScreen('gameScreen');
-  bgMusic.play().catch(() => {});
+  hide('homeScreen');
+  show('gameScreen');
+  buildPawnLayer();
+  renderAll();
+  updateStatus('Dice roll karo');
+  if (musicOn) {
+    const bg = document.getElementById('bgMusic');
+    bg.volume = 0.35;
+    bg.play().catch(() => {});
+  }
 }
 
-// Dice click
-document.getElementById('diceArea').addEventListener('click', () => {
-  if (!game || game.gameOver || game.diceRolled || rolling) return;
-  playSound('roll');
-  const val = game.rollDice();
-  animateDice(val, () => {
-    if (game.sixStreak === 3) {
-      statusText.textContent = 'Teen 6! Turn gaya';
-      setTimeout(() => {
-        game.endTurn(true);
-        updateBanner();
-        statusText.textContent = 'Dice roll karo';
-        renderAllPawns();
-      }, 900);
-      return;
+function buildPawnLayer() {
+  const layer = document.getElementById('pawnLayer');
+  layer.innerHTML = '';
+  for (const color of game.players) {
+    for (const pawn of game.pawns[color]) {
+      const img = document.createElement('img');
+      img.className = 'pawn';
+      img.dataset.color = color;
+      img.dataset.id = pawn.id;
+      img.src = `assets/object/ak_pawn_${color}.png`;
+      img.addEventListener('click', onPawnClick);
+      layer.appendChild(img);
     }
-    const movable = game.movablePawns();
-    if (movable.length === 0) {
-      statusText.textContent = `${val} aaya – koi move nahi`;
-      setTimeout(() => {
-        game.endTurn(true);
-        updateBanner();
-        statusText.textContent = 'Dice roll karo';
-        renderAllPawns();
-      }, 900);
-    } else {
-      statusText.textContent = `${val} aaya – pawn chuno`;
-      highlightMovable(movable);
+  }
+}
+
+// Convert a fractional grid coordinate (0..15) to % position within board
+function gridToPercent(gx, gy) {
+  return { left: (gx / 15) * 100, top: (gy / 15) * 100 };
+}
+
+function pawnGridPos(color, pawn, stackIndex, stackSize) {
+  if (pawn.pos === -1) {
+    const slotIdx = pawn.id % 4;
+    const [sx, sy] = BASE_SLOTS[color][slotIdx];
+    return [sx, sy];
+  }
+  const [col, row] = PATHS[color][pawn.pos];
+  // nudge stacked pawns apart slightly so they don't fully overlap
+  if (stackSize > 1) {
+    const offsets = [[-0.16,-0.16],[0.16,-0.16],[-0.16,0.16],[0.16,0.16]];
+    const [ox, oy] = offsets[stackIndex % 4];
+    return [col + 0.5 + ox, row + 0.5 + oy];
+  }
+  return [col + 0.5, row + 0.5];
+}
+
+function renderAll() {
+  renderPawns();
+  renderTurnBanner();
+  renderDice();
+}
+
+function renderPawns() {
+  // group pawns by exact board cell to know stack sizes (only when pos !== -1)
+  const cellGroups = {};
+  for (const color of game.players) {
+    for (const pawn of game.pawns[color]) {
+      if (pawn.pos === -1) continue;
+      const [col, row] = PATHS[color][pawn.pos];
+      const key = col + ',' + row;
+      cellGroups[key] = cellGroups[key] || [];
+      cellGroups[key].push({ color, pawn });
     }
+  }
+
+  const movable = game.diceRolled ? new Set(game.movablePawns()) : new Set();
+  const canInteract = game.diceRolled && !game.gameOver;
+
+  const layer = document.getElementById('pawnLayer');
+  for (const color of game.players) {
+    for (const pawn of game.pawns[color]) {
+      const el = layer.querySelector(`.pawn[data-color="${color}"][data-id="${pawn.id}"]`);
+      if (!el) continue;
+
+      let stackIndex = 0, stackSize = 1;
+      if (pawn.pos !== -1) {
+        const [col, row] = PATHS[color][pawn.pos];
+        const key = col + ',' + row;
+        const group = cellGroups[key];
+        stackSize = group.length;
+        stackIndex = group.findIndex(g => g.color === color && g.pawn.id === pawn.id);
+      }
+
+      const [gx, gy] = pawnGridPos(color, pawn, stackIndex, stackSize);
+      const { left, top } = gridToPercent(gx, gy);
+      el.style.left = left + '%';
+      el.style.top = top + '%';
+
+      const isMovable = color === game.currentPlayer && canInteract && movable.has(pawn.id);
+      el.classList.toggle('movable', isMovable);
+      el.style.pointerEvents = isMovable ? 'auto' : 'none';
+      el.style.zIndex = pawn.pos === -1 ? 3 : (5 + stackIndex);
+    }
+  }
+}
+
+function renderTurnBanner() {
+  const banner = document.getElementById('turnBanner');
+  if (game.gameOver) {
+    banner.textContent = 'Game khatam!';
+    return;
+  }
+  const color = game.currentPlayer;
+  banner.textContent = `${COLOR_LABEL[color]} ki baari`;
+  banner.style.color = '#333';
+  banner.style.borderLeft = `8px solid ${COLOR_HEX[color]}`;
+}
+
+function renderDice() {
+  const img = document.getElementById('diceImg');
+  const val = game.diceValue || 1;
+  img.src = `assets/rotateobject/${val}.png`;
+}
+
+function updateStatus(text) {
+  document.getElementById('statusText').textContent = text;
+}
+
+// ---------------------------------------------------------------------
+// Dice roll interaction
+// ---------------------------------------------------------------------
+document.addEventListener('DOMContentLoaded', () => {
+  initHomeScreen();
+  document.getElementById('diceArea').addEventListener('click', onDiceClick);
+  document.getElementById('quitBtn').addEventListener('click', () => show('quitPanel'));
+  document.getElementById('quitYes').addEventListener('click', () => {
+    hide('quitPanel');
+    hide('gameScreen');
+    document.getElementById('bgMusic').pause();
+    show('homeScreen');
+  });
+  document.getElementById('quitNo').addEventListener('click', () => hide('quitPanel'));
+  document.getElementById('replayBtn').addEventListener('click', () => {
+    hide('resultScreen');
+    hide('gameScreen');
+    show('homeScreen');
   });
 });
 
-function onPawnClick(color, id) {
-  if (!game || game.gameOver) return;
-  if (color !== game.currentPlayer) return;
-  if (!game.diceRolled) return;
-  const movable = game.movablePawns();
-  if (!movable.includes(id)) return;
+function onDiceClick() {
+  if (!game || game.gameOver || rollLock || game.diceRolled) return;
+  rollLock = true;
+  const diceArea = document.getElementById('diceArea');
+  diceArea.classList.add('rolling');
+  playSound('sndRoll');
 
-  playSound('tap');
-  const result = game.movePawn(id);
-  if (!result) return;
+  let frame = 0;
+  const spin = setInterval(() => {
+    frame = (frame % 6) + 1;
+    document.getElementById('diceImg').src = `assets/rotateobject/${frame}.png`;
+  }, 80);
 
-  highlightMovable([]); // clear highlights
+  setTimeout(() => {
+    clearInterval(spin);
+    diceArea.classList.remove('rolling');
+    const value = game.rollDice();
+    renderDice();
+    rollLock = false;
+    handlePostRoll(value);
+  }, 650);
+}
 
-  // Sound selection
-  if (result.sentHome) playSound('open');
-  else if (result.captured.length) playSound('capture');
-  else if (result.to >= HOME_ENTRY_POS) playSound('walkCCW');
-  else playSound('walkCW');
-
-  renderAllPawns();
-
-  if (result.finished) {
-    if (game.hasWon(color)) {
-      game.endTurn();
-      if (game.gameOver) {
-        setTimeout(() => showResult(), 500);
-        return;
-      }
-    }
-  }
-
-  if (result.captured.length) {
-    statusText.textContent = `Capture! 🎯`;
-  } else if (result.finished) {
-    statusText.textContent = `Pawn ghar pahuncha! 🏠`;
-  } else {
-    statusText.textContent = '';
-  }
-
-  game.endTurn();
-  if (game.gameOver) {
-    setTimeout(() => showResult(), 500);
+function handlePostRoll(value) {
+  if (game.sixStreak === 3) {
+    updateStatus(`3 chhakke laga diye! Baari khatam.`);
+    setTimeout(() => {
+      game.endTurn(true);
+      renderAll();
+      updateStatus('Dice roll karo');
+    }, 900);
     return;
   }
 
-  updateBanner();
-  statusText.textContent = game.diceValue === 6
-    ? 'Dobara chance milega – dice roll karo'
-    : 'Dice roll karo';
+  const movable = game.movablePawns();
+  renderPawns();
+
+  if (movable.length === 0) {
+    updateStatus(`${value} aaya, lekin koi chaal nahi. Agli baari.`);
+    setTimeout(() => {
+      game.endTurn(true);
+      renderAll();
+      updateStatus('Dice roll karo');
+    }, 900);
+  } else {
+    updateStatus(`${value} aaya \u2014 ek pawn chuno`);
+  }
+}
+
+// ---------------------------------------------------------------------
+// Pawn interaction
+// ---------------------------------------------------------------------
+function onPawnClick(e) {
+  const el = e.currentTarget;
+  const color = el.dataset.color;
+  const id = parseInt(el.dataset.id, 10);
+  if (!game || game.gameOver) return;
+  if (color !== game.currentPlayer) return;
+  if (!game.diceRolled) return;
+  if (!game.movablePawns().includes(id)) return;
+
+  const result = game.movePawn(id);
+  if (!result) return;
+
+  playSound(result.sentHome ? 'sndOpen' : 'sndWalkCW');
+  renderPawns();
+
+  if (result.captured.length > 0) {
+    setTimeout(() => playSound('sndCapture'), 200);
+  }
+
+  setTimeout(() => {
+    const color2 = game.currentPlayer;
+    let msg = '';
+    if (result.finished) msg = `${COLOR_LABEL[color2]} ka pawn ghar pahuncha! `;
+    if (result.captured.length > 0) msg += `Kaat diya! `;
+
+    if (game.hasWon(color2) && !game.gameOver) {
+      // mark winner via endTurn logic below
+    }
+
+    const wasSix = game.diceValue === 6 && game.sixStreak < 3;
+    game.endTurn(false);
+
+    if (game.gameOver) {
+      renderAll();
+      showResult();
+      return;
+    }
+
+    renderAll();
+    if (msg) updateStatus(msg + (wasSix ? '(extra chaal)' : ''));
+    else updateStatus(wasSix ? 'Chhakka! Ek aur chaal.' : 'Dice roll karo');
+  }, 320);
 }
 
 function showResult() {
-  playSound('win');
-  const colorNames = { green: 'Hare', red: 'Lal', blue: 'Neele', yellow: 'Peele' };
+  playSound('sndWin');
   const winner = game.winners[0];
   document.getElementById('resultText').textContent =
-    `🏆 ${colorNames[winner] || winner} ne jeeta!`;
-  showOverlay('resultScreen');
+    winner ? `${COLOR_LABEL[winner]} JEET GAYA! \uD83C\uDFC6` : 'Game Over';
+  show('resultScreen');
 }
-
-/* ---- Quit panel ---- */
-document.getElementById('quitBtn').addEventListener('click', () => {
-  playSound('tap');
-  showOverlay('quitPanel');
-});
-document.getElementById('quitNo').addEventListener('click', () => {
-  playSound('tap');
-  hideOverlay('quitPanel');
-});
-document.getElementById('quitYes').addEventListener('click', () => {
-  playSound('tap');
-  hideOverlay('quitPanel');
-  bgMusic.pause();
-  game = null;
-  showScreen('homeScreen');
-});
-
-/* ---- Replay ---- */
-document.getElementById('replayBtn').addEventListener('click', () => {
-  playSound('tap');
-  hideOverlay('resultScreen');
-  if (game) {
-    const players = game.players.slice();
-    startGame(players);
-  } else {
-    showScreen('homeScreen');
-  }
-});
